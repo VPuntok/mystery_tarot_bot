@@ -1,0 +1,42 @@
+# Django и основные зависимости
+Django==5.0.2
+djangorestframework==3.15.0
+django-cors-headers==4.3.1
+django-environ==0.11.2
+
+# Telegram Bot
+python-telegram-bot==20.7
+
+# База данных
+psycopg2-binary==2.9.9  # Для PostgreSQL
+# sqlite3 встроен в Python
+
+# Миграции
+django-extensions==3.2.3
+
+# API и веб-интерфейс
+django-filter==23.5
+drf-yasg==1.21.7  # Swagger документация
+
+# Платежи
+stripe==7.8.0
+
+# AI интеграция
+openai==1.3.7
+
+# Утилиты
+python-decouple==3.8
+Pillow==10.1.0  # Для работы с изображениями
+celery==5.3.4  # Для фоновых задач
+redis==5.0.1  # Для Celery
+
+# Разработка и тестирование
+pytest==7.4.3
+pytest-django==4.7.0
+factory-boy==3.3.0
+coverage==7.3.2
+
+# Линтеры и форматирование
+black==23.11.0
+flake8==6.1.0
+isort==5.12.0 
