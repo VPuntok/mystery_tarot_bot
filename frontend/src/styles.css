@@ -1,0 +1,104 @@
+/* Дополнительные стили для Telegram Mini App */
+
+.spread-card {
+    background: var(--tg-theme-secondary-bg-color, #f8f9fa);
+    border: 1px solid var(--tg-theme-hint-color, #dee2e6);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.spread-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.spread-card.selected {
+    border-color: var(--tg-theme-button-color, #2481cc);
+    background: var(--tg-theme-button-color, #2481cc);
+    color: var(--tg-theme-button-text-color, #ffffff);
+}
+
+.interpretation-result {
+    background: var(--tg-theme-secondary-bg-color, #f8f9fa);
+    border-radius: 12px;
+    padding: 16px;
+    margin-top: 16px;
+}
+
+.cards-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 12px 0;
+}
+
+.card-item {
+    background: var(--tg-theme-bg-color, #ffffff);
+    border: 1px solid var(--tg-theme-hint-color, #dee2e6);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 14px;
+    text-align: center;
+}
+
+.package-item {
+    background: var(--tg-theme-secondary-bg-color, #f8f9fa);
+    border: 1px solid var(--tg-theme-hint-color, #dee2e6);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 12px;
+}
+
+.package-price {
+    font-size: 20px;
+    font-weight: bold;
+    color: var(--tg-theme-button-color, #2481cc);
+}
+
+.package-description {
+    color: var(--tg-theme-hint-color, #6c757d);
+    font-size: 14px;
+    margin-top: 4px;
+}
+
+.history-item {
+    background: var(--tg-theme-secondary-bg-color, #f8f9fa);
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 8px;
+    font-size: 14px;
+}
+
+.history-date {
+    color: var(--tg-theme-hint-color, #6c757d);
+    font-size: 12px;
+}
+
+/* Анимации */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.fade-in {
+    animation: fadeIn 0.3s ease-out;
+}
+
+/* Адаптивность */
+@media (max-width: 480px) {
+    .container {
+        padding: 12px;
+    }
+    
+    .card {
+        padding: 12px;
+    }
+    
+    .button {
+        padding: 10px 20px;
+        font-size: 14px;
+    }
+} 
