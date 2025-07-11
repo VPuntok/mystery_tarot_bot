@@ -12,7 +12,8 @@
   },
   "dependencies": {
     "@twa-dev/sdk": "^7.0.0",
-    "axios": "^1.6.0"
+    "axios": "^1.6.0",
+    "marked": "^16.0.0"
   },
   "devDependencies": {
     "@babel/core": "^7.28.0",
