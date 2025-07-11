@@ -23,6 +23,7 @@ stripe==7.8.0
 
 # AI интеграция
 openai==1.3.7
+yandex-cloud-ml-sdk==0.12.0  # YandexGPT Lite SDK
 
 # Утилиты
 python-decouple==3.8
