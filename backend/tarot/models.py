@@ -55,6 +55,7 @@ class Interpretation(models.Model):
     spread = models.ForeignKey(TarotSpread, on_delete=models.CASCADE, related_name='interpretations', verbose_name='Расклад')
     cards = models.ManyToManyField(TarotCard, verbose_name='Карты')
     ai_response = models.TextField('AI-ответ')
+    user_question = models.TextField('Вопрос пользователя', blank=True, null=True)
     created_at = models.DateTimeField('Дата', auto_now_add=True)
 
     class Meta:
