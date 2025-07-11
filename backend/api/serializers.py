@@ -5,10 +5,47 @@ from tarot.models import TarotDeck, TarotCard, TarotSpread, Interpretation
 from payments.models import Package, Payment
 
 class ProjectSerializer(serializers.ModelSerializer):
+    theme_settings = serializers.SerializerMethodField()
+    
     class Meta:
         model = Project
-        fields = ['id', 'name', 'telegram_token', 'design', 'status', 'created_at', 'updated_at']
+        fields = ['id', 'name', 'telegram_token', 'design', 'theme_settings', 'status', 'created_at', 'updated_at']
         read_only_fields = ['created_at', 'updated_at']
+    
+    def get_theme_settings(self, obj):
+        """Получаем настройки темы из поля design или возвращаем дефолтные"""
+        design = obj.design or {}
+        return {
+            'primary_color': design.get('primary_color', '#6366f1'),
+            'secondary_color': design.get('secondary_color', '#8b5cf6'),
+            'accent_color': design.get('accent_color', '#f59e0b'),
+            'bg_primary': design.get('bg_primary', '#0f0f23'),
+            'bg_secondary': design.get('bg_secondary', '#1a1a2e'),
+            'bg_card': design.get('bg_card', '#1e293b'),
+            'text_primary': design.get('text_primary', '#f8fafc'),
+            'text_secondary': design.get('text_secondary', '#cbd5e1'),
+            'text_muted': design.get('text_muted', '#64748b'),
+            'border_color': design.get('border_color', '#334155'),
+            'font_family': design.get('font_family', 'Inter'),
+            'border_radius': design.get('border_radius', '12px'),
+            'is_dark_theme': design.get('is_dark_theme', True)
+        }
+
+class ThemeSettingsSerializer(serializers.Serializer):
+    """Сериализатор для настроек темы"""
+    primary_color = serializers.CharField(max_length=7, required=False)
+    secondary_color = serializers.CharField(max_length=7, required=False)
+    accent_color = serializers.CharField(max_length=7, required=False)
+    bg_primary = serializers.CharField(max_length=7, required=False)
+    bg_secondary = serializers.CharField(max_length=7, required=False)
+    bg_card = serializers.CharField(max_length=7, required=False)
+    text_primary = serializers.CharField(max_length=7, required=False)
+    text_secondary = serializers.CharField(max_length=7, required=False)
+    text_muted = serializers.CharField(max_length=7, required=False)
+    border_color = serializers.CharField(max_length=7, required=False)
+    font_family = serializers.CharField(max_length=50, required=False)
+    border_radius = serializers.CharField(max_length=10, required=False)
+    is_dark_theme = serializers.BooleanField(required=False)
 
 class UserProfileSerializer(serializers.ModelSerializer):
     project_name = serializers.CharField(source='project.name', read_only=True)
@@ -54,7 +91,7 @@ class InterpretationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Interpretation
         fields = ['id', 'user', 'user_username', 'spread', 'spread_name', 'cards', 
-                 'cards_names', 'cards_images', 'ai_response', 'created_at']
+                 'cards_names', 'cards_images', 'ai_response', 'user_question', 'created_at']
         read_only_fields = ['created_at']
     
     def get_cards_names(self, obj):

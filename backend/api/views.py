@@ -10,23 +10,34 @@ from django.utils import timezone
 from .serializers import (
     ProjectSerializer, UserProfileSerializer, TarotDeckSerializer, TarotCardSerializer,
     TarotSpreadSerializer, InterpretationSerializer, PackageSerializer, 
-    PaymentSerializer, PaymentCreateSerializer
+    PaymentSerializer, PaymentCreateSerializer, ThemeSettingsSerializer
 )
 from projects.models import Project
 from users.models import UserProfile
 from tarot.models import TarotDeck, TarotCard, TarotSpread, Interpretation
 from payments.models import Package, Payment
 from telegram_bot.handlers import TelegramBotManager
+from tarot.services import yandex_gpt_service
 
 class HealthCheckView(APIView):
     """Простой endpoint для проверки здоровья API"""
     permission_classes = [AllowAny]
     
     def get(self, request):
+        # Проверяем статус YandexGPT сервиса
+        yandex_status = yandex_gpt_service.get_model_info()
+        
         return Response({
             'status': 'ok',
             'message': 'API работает корректно',
-            'timestamp': timezone.now().isoformat()
+            'timestamp': timezone.now().isoformat(),
+            'yandexgpt': {
+                'sdk_available': yandex_status['sdk_available'],
+                'model_initialized': yandex_status['model_initialized'],
+                'api_key_configured': yandex_status['api_key_configured'],
+                'folder_id_configured': yandex_status['folder_id_configured'],
+                'connection_test': yandex_status['connection_test']
+            }
         })
 
 class ProjectViewSet(viewsets.ModelViewSet):
@@ -37,6 +48,42 @@ class ProjectViewSet(viewsets.ModelViewSet):
     filterset_fields = ['status']
     search_fields = ['name']
     ordering_fields = ['created_at', 'name']
+
+    @action(detail=True, methods=['get'])
+    def theme_settings(self, request, pk=None):
+        """Получение настроек темы для проекта"""
+        project = self.get_object()
+        serializer = self.get_serializer(project)
+        return Response({
+            'success': True,
+            'theme_settings': serializer.data['theme_settings']
+        })
+
+    @action(detail=True, methods=['post'])
+    def update_theme_settings(self, request, pk=None):
+        """Обновление настроек темы для проекта"""
+        project = self.get_object()
+        theme_serializer = ThemeSettingsSerializer(data=request.data)
+        
+        if theme_serializer.is_valid():
+            # Обновляем поле design с новыми настройками темы
+            current_design = project.design or {}
+            current_design.update(theme_serializer.validated_data)
+            project.design = current_design
+            project.save()
+            
+            # Возвращаем обновленные настройки
+            serializer = self.get_serializer(project)
+            return Response({
+                'success': True,
+                'message': 'Настройки темы обновлены',
+                'theme_settings': serializer.data['theme_settings']
+            })
+        else:
+            return Response({
+                'success': False,
+                'errors': theme_serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=True, methods=['post'])
     def send_message(self, request, pk=None):
@@ -102,6 +149,112 @@ class InterpretationViewSet(viewsets.ModelViewSet):
             # Получаем данные
             user_id = request.data.get('user')
             spread_id = request.data.get('spread')
+            interpretation_id = request.data.get('interpretation_id')  # ID существующей интерпретации
+            user_context = request.data.get('user_context', '')  # Дополнительный контекст от пользователя
+            
+            if not user_id or not spread_id:
+                return Response({
+                    'error': 'Необходимы поля user и spread'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Получаем объекты
+            user = UserProfile.objects.get(id=user_id)
+            spread = TarotSpread.objects.get(id=spread_id)
+            
+            # Если указан interpretation_id, используем существующую интерпретацию
+            if interpretation_id:
+                try:
+                    interpretation = Interpretation.objects.get(id=interpretation_id, user=user, spread=spread)
+                    cards = list(interpretation.cards.all())
+                except Interpretation.DoesNotExist:
+                    return Response({
+                        'error': 'Интерпретация не найдена'
+                    }, status=status.HTTP_404_NOT_FOUND)
+            else:
+                # Проверяем баланс пользователя (только для новых интерпретаций)
+                if user.balance <= 0:
+                    return Response({
+                        'error': 'Недостаточно раскладов. Пополните баланс.'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                
+                # Получаем карты для расклада
+                cards = TarotCard.objects.filter(deck__project=spread.project).order_by('?')[:spread.num_cards]
+                
+                if len(cards) < spread.num_cards:
+                    return Response({
+                        'error': f'Недостаточно карт для расклада. Нужно {spread.num_cards}, доступно {len(cards)}'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                
+                # Создаем новую интерпретацию
+                interpretation = Interpretation.objects.create(
+                    user=user,
+                    spread=spread,
+                    ai_response='',
+                    user_question=user_context if user_context else None
+                )
+                interpretation.cards.set(cards)
+                
+                # Уменьшаем баланс пользователя
+                user.balance -= 1
+                user.save()
+            
+            # Подготавливаем данные карт для AI
+            cards_data = []
+            for card in cards:
+                # Определяем, прямая или перевернутая карта (случайно)
+                import random
+                is_reversed = random.choice([True, False])
+                
+                cards_data.append({
+                    'name': card.name,
+                    'meaning': card.meaning_reversed if is_reversed else card.meaning_upright,
+                    'is_reversed': is_reversed
+                })
+            
+            # Генерируем AI-ответ через сервис YandexGPT
+            ai_response = yandex_gpt_service.generate_interpretation(
+                spread_name=spread.name,
+                cards=cards_data,
+                user_context=user_context
+            )
+            
+            # Обновляем интерпретацию с AI-ответом
+            interpretation.ai_response = ai_response
+            interpretation.save()
+            
+            # Возвращаем результат через сериализатор для правильной структуры
+            serializer = self.get_serializer(interpretation, context={'request': request})
+            response_data = serializer.data
+            
+            # Добавляем дополнительную информацию
+            response_data['success'] = True
+            response_data['cards_used'] = [{'name': card.name, 'is_reversed': card_data['is_reversed']} 
+                                          for card, card_data in zip(cards, cards_data)]
+            response_data['ai_service_status'] = 'active' if yandex_gpt_service.model else 'fallback'
+            
+            return Response(response_data, status=status.HTTP_201_CREATED)
+            
+        except UserProfile.DoesNotExist:
+            return Response({
+                'error': 'Пользователь не найден'
+            }, status=status.HTTP_404_NOT_FOUND)
+        except TarotSpread.DoesNotExist:
+            return Response({
+                'error': 'Расклад не найден'
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({
+                'error': f'Ошибка создания интерпретации: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['post'])
+    def get_cards(self, request):
+        """Получение карт для расклада без создания интерпретации"""
+        try:
+            # Получаем данные
+            user_id = request.data.get('user')
+            spread_id = request.data.get('spread')
+            user_context = request.data.get('user_context', '')  # Дополнительный контекст от пользователя
             
             if not user_id or not spread_id:
                 return Response({
@@ -126,25 +279,46 @@ class InterpretationViewSet(viewsets.ModelViewSet):
                     'error': f'Недостаточно карт для расклада. Нужно {spread.num_cards}, доступно {len(cards)}'
                 }, status=status.HTTP_400_BAD_REQUEST)
             
-            # Генерируем AI-ответ
-            cards_text = ", ".join([card.name for card in cards])
-            ai_response = f"""🔮 Ваше предсказание по раскладу "{spread.name}"
-
-Выбранные карты: {cards_text}
-
-Интерпретация:
-Карты показывают, что в вашей жизни наступает период изменений и новых возможностей. 
-Будьте открыты новым идеям и доверяйте своей интуиции. 
-Впереди вас ждут интересные события и важные решения.
-
-Совет: Слушайте свое сердце и не бойтесь перемен. 
-Время действовать настало!"""
+            # Подготавливаем данные карт
+            cards_data = []
+            cards_names = []
+            cards_images = []
+            cards_used = []
             
-            # Создаем интерпретацию
+            for card in cards:
+                # Определяем, прямая или перевернутая карта (случайно)
+                import random
+                is_reversed = random.choice([True, False])
+                
+                cards_data.append({
+                    'name': card.name,
+                    'meaning': card.meaning_reversed if is_reversed else card.meaning_upright,
+                    'is_reversed': is_reversed
+                })
+                
+                cards_names.append(card.name)
+                
+                # Добавляем изображение карты
+                request = self.request
+                if card.image:
+                    if request is not None:
+                        cards_images.append(request.build_absolute_uri(card.image.url))
+                    else:
+                        cards_images.append(card.image.url)
+                else:
+                    cards_images.append('')
+                
+                cards_used.append({
+                    'name': card.name,
+                    'is_reversed': is_reversed
+                })
+            
+            # Создаем временную интерпретацию (без AI-ответа) для связи карт
             interpretation = Interpretation.objects.create(
                 user=user,
                 spread=spread,
-                ai_response=ai_response
+                ai_response='',  # Пустой ответ, будет заполнен позже
+                user_question=user_context if user_context else None
             )
             interpretation.cards.set(cards)
             
@@ -153,8 +327,15 @@ class InterpretationViewSet(viewsets.ModelViewSet):
             user.save()
             
             # Возвращаем результат
-            serializer = self.get_serializer(interpretation)
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
+            return Response({
+                'success': True,
+                'interpretation_id': interpretation.id,
+                'spread_name': spread.name,
+                'cards_names': cards_names,
+                'cards_images': cards_images,
+                'cards_used': cards_used,
+                'new_balance': user.balance
+            }, status=status.HTTP_200_OK)
             
         except UserProfile.DoesNotExist:
             return Response({
@@ -166,7 +347,7 @@ class InterpretationViewSet(viewsets.ModelViewSet):
             }, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             return Response({
-                'error': f'Ошибка создания интерпретации: {str(e)}'
+                'error': f'Ошибка получения карт: {str(e)}'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class PackageViewSet(viewsets.ModelViewSet):
